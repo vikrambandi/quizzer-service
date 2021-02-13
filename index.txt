@@ -1,0 +1,128 @@
+/** STEP 1: Packages */
+// For a minimal node.js server we need to install and import the bellow packages
+
+const express = require("express"); // fast, open-source node.js server
+const cors = require("cors"); // enables CORS (cross-origin resource sharing)
+const bodyParser = require("body-parser"); // parses json body into javascript object
+const morgan = require("morgan"); // log http requests
+const mongoose = require("mongoose"); // mongodb orm
+
+/** STEP 2: DATABASE */
+
+// connect to mongodb
+mongoose.connect("mongodb://localhost:27017/blog", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  useCreateIndex: true,
+  useFindAndModify: false,
+});
+
+// create mongoose schema
+const postSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    body: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+
+/** STEP 3: MVC Like App */
+// An MVC app is structured into [Models, Views, Controllers]
+// A typical API does not to expose views.
+// Sometimes, extra layers are added to MVC such as DAL, Services, Repositories
+// In this example, the app is divided into 3 layers [Models -> Services -> Controllers]
+// Note: usually, each layer exists in a directory.
+
+// MODELS: represents domain-specific data
+// post model - built based on mongoose schema postSchema [defined above]
+const Post = mongoose.model("post", postSchema);
+
+// SERVICES: is an additional layer in MVC that mediates communication between a Controller and a Model
+// Note: this layer adds more abstractions and ease of testability
+// post service
+const postService = {
+  // find service - uses post model to query all posts
+  find: () => Post.find({}),
+
+  // save service - uses post model to save a post
+  save: async (postData) => {
+    const post = new Post({ ...postData });
+    await post.save();
+    return post;
+  },
+};
+
+// post controller - each action in the controller, handles a specific route.
+const postController = {
+  // GET /api/posts
+  find: async (req, res, next) => {
+    try {
+      const posts = await postService.find({ ...req.query });
+      res.json(posts);
+    } catch (error) {
+      error.msg = "failed to retrieve posts";
+      next(error);
+    }
+  },
+
+  // POST /api/posts
+  save: async (req, res, next) => {
+    try {
+      const post = await postService.save(req.body);
+      res.json(post);
+    } catch (error) {
+      error.msg = "failed to create post";
+      next(error);
+    }
+  },
+};
+
+// routes - define the routes based on express Router
+const router = express.Router();
+router.get("/posts", postController.find); // GET /api/posts
+router.post("/posts", postController.save); // POST /api/posts
+
+/** STEP 4: Express Server */
+// create an express app
+const app = express();
+
+// use third-party middlewares
+app.use(cors());
+app.use(morgan("tiny"));
+app.use(bodyParser.json());
+
+// handle routes
+// use the router within the express app to handle routes defined above
+app.use("/api", router);
+
+// use custom middlewares if any
+
+// handle a request if url path is not found
+const notFound = (req, res, next) => {
+  res.status(404);
+  res.json({
+    status: 404,
+    error: "not found",
+  });
+};
+
+// handle an error if occured in the controller
+const handleError = (error, req, res, next) => {
+  console.log(error);
+  res.status(error.status || 500);
+  res.json({
+    message: error.message || "failed: not known error",
+    msg: error.msg,
+    stack: error.stack,
+  });
+};
+app.use(notFound); // in-case a url path is not found
+app.use(handleError); // in-case an error has occured
+
+// Run the server
+// running the server on a port to listen to HTTP requests.
+const PORT = 3000;
+app.listen(PORT, (err) => {
+  if (err) console.log(err);
+  else console.log(`Server started on port: ${PORT}`);
+});
