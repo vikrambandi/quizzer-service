@@ -16,13 +16,16 @@ router.post('/', (req, res) => {
 router.get('/', (req, res) => {
 	db.collection('collections')
 		.get()
-		.then(snapshot => { console.log(snapshot); return snapshot.docs.map(doc => doc.data()); })
+		.then(snapshot => snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
 		.then(docs => res.send(docs)).catch(err => res.send(err));
 });
 
 router.get('/:id', function (req, res) {
-	console.log(req.body);
-	res.send('/games api get request');
+	db.collection('collections')
+		.doc(req.query.id)
+		.get()
+		.then(doc => res.send({ id: doc.id, ...doc.data() }))
+		.catch(err => res.send(err));
 });
 
 module.exports = router;
